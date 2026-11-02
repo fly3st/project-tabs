@@ -17,6 +17,7 @@ To change the shortcut: `chrome://extensions/shortcuts`.
 - **Close** (×) – closes the group; it lands in **Recently closed** so nothing is lost by accident. Groups also land there if a window is closed.
 - **Search** – press `/`, type, and it filters projects, tabs and archives by title or URL. **Enter** jumps to the first open match.
 - **Collapse others** – tidy the tab strip down to the project you're in.
+- **Collapsed = unloaded** – when a group is collapsed (from Chrome's tab strip, Focus or Collapse others), its tabs are discarded to free memory. They stay in the group and reload when you open them. The active tab and tabs playing audio are left alone.
 - **⋯ → Export / Import backup** – a JSON file of open, archived and recently closed projects.
 
 Archives are stored locally in the browser (`chrome.storage.local`); export a backup now and then.

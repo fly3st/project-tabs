@@ -67,13 +67,47 @@ chrome.tabGroups.onRemoved.addListener(async (group) => {
   scheduleRefresh();
 });
 
+// ---- Free memory when a group collapses ----
+// When a group is collapsed (from Chrome's tab strip, Focus, or Collapse
+// others), its tabs are discarded: they stay in the strip but are unloaded
+// from memory, and reload when you open them again.
+
+const DISCARD_DELAY_MS = 1000;
+const discardTimers = new Map(); // groupId -> timeout
+
+function scheduleDiscard(groupId) {
+  clearTimeout(discardTimers.get(groupId));
+  // Wait a moment: collapsing the active tab's group makes Chrome switch
+  // to another tab first, and a quick collapse/expand should be a no-op.
+  discardTimers.set(groupId, setTimeout(() => {
+    discardTimers.delete(groupId);
+    discardGroup(groupId).catch(() => {});
+  }, DISCARD_DELAY_MS));
+}
+
+async function discardGroup(groupId) {
+  const group = await chrome.tabGroups.get(groupId).catch(() => null);
+  if (!group || !group.collapsed) return;
+  const tabs = await chrome.tabs.query({ groupId });
+  for (const t of tabs) {
+    // Keep the tab you're looking at, tabs playing sound, and ones already unloaded.
+    if (t.active || t.audible || t.discarded) continue;
+    await chrome.tabs.discard(t.id).catch(() => {});
+  }
+}
+
 chrome.tabGroups.onCreated.addListener(scheduleRefresh);
-chrome.tabGroups.onUpdated.addListener(scheduleRefresh);
+chrome.tabGroups.onUpdated.addListener((group) => {
+  if (group.collapsed) scheduleDiscard(group.id);
+  else clearTimeout(discardTimers.get(group.id));
+  scheduleRefresh();
+});
 chrome.tabs.onCreated.addListener(scheduleRefresh);
 chrome.tabs.onRemoved.addListener(scheduleRefresh);
 chrome.tabs.onMoved.addListener(scheduleRefresh);
 chrome.tabs.onAttached.addListener(scheduleRefresh);
 chrome.tabs.onDetached.addListener(scheduleRefresh);
+chrome.tabs.onReplaced.addListener(scheduleRefresh);
 chrome.tabs.onUpdated.addListener((_id, change) => {
   if ('url' in change || 'title' in change || 'groupId' in change) scheduleRefresh();
 });
