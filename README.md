@@ -30,7 +30,6 @@ One side panel to see, search, focus, close and reopen every project you work on
 - [Moving in your Chrome saved groups](#moving-in-your-chrome-saved-groups)
 - [Privacy and permissions](#privacy-and-permissions)
 - [Good to know](#good-to-know)
-- [Development](#development)
 
 ## Why Project Tabs
 
@@ -152,31 +151,3 @@ It asks for no access to the content of web pages.
 - **Incognito windows** only appear if you turn on *Allow in Incognito* on the extension's details page.
 - When you open a saved project, Chrome creates a new group for it. If Chrome also has its own saved copy of that group on the bookmarks bar, you may see both; delete Chrome's copy there.
 - Your library lives in this browser profile. Export a backup now and then.
-
-## Development
-
-Plain JavaScript, HTML and CSS. No build step and no dependencies.
-
-```
-manifest.json        MV3 manifest
-background.js        opens the panel, keeps the project library in sync, opens and closes projects, unloads collapsed groups
-sidepanel.html/css/js  the panel UI
-icons/               toolbar and store icons (rendered from assets/icon.svg)
-store/               Chrome Web Store listing, screenshots and promo images
-tools/               scripts for packaging and for regenerating icons and screenshots
-```
-
-**Package for the Chrome Web Store**
-
-```sh
-tools/build-zip.sh          # writes dist/project-tabs-<version>.zip
-```
-
-**Regenerate the icons and screenshots** (needs Node and Playwright with Chromium; these scripts are not part of the extension)
-
-```sh
-node tools/render-icons.cjs     # assets/icon.svg -> icons/*.png
-node tools/shots/shoot.cjs      # store/screenshots, store/promo, assets/panel-light-dark.png
-```
-
-The screenshot script loads the real side panel with a stand-in for the `chrome.*` APIs (`tools/shots/mock-chrome.js`) and the sample data in `tools/shots/data.js`, so the screenshots always match the current UI.
