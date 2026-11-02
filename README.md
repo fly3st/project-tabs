@@ -151,3 +151,7 @@ It asks for no access to the content of web pages.
 - **Incognito windows** only appear if you turn on *Allow in Incognito* on the extension's details page.
 - When you open a saved project, Chrome creates a new group for it. If Chrome also has its own saved copy of that group on the bookmarks bar, you may see both; delete Chrome's copy there.
 - Your library lives in this browser profile. Export a backup now and then.
+
+## License
+
+Copyright © 2026 fly3st. All rights reserved. The code is public so you can see how Project Tabs works, but you may not copy, redistribute or publish it. See [LICENSE](LICENSE).

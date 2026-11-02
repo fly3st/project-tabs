@@ -23,15 +23,15 @@ Unzip `project-tabs-1.2.1.zip` into a new folder, load that folder with **Load u
    - Add and **verify your contact email**. You can't publish until it's verified.
    - Answer the **trader / non-trader** question. If this is a personal, non-commercial project, choose **non-trader**. Traders have to publish an address and phone number in the EU.
 
-## 2. Put the privacy policy online
+## 2. Privacy policy link
 
-The store needs a public link to a privacy policy, and this repository is private, so GitHub can't serve it from here. The quickest option is a public gist:
+The repository is public, so the policy is already online. Use this as the privacy policy URL:
 
-1. Open https://gist.github.com
-2. Filename: `project-tabs-privacy.md`. Paste the whole of [PRIVACY.md](../PRIVACY.md).
-3. Click **Create public gist** and copy its URL.
+```
+https://github.com/fly3st/project-tabs/blob/main/PRIVACY.md
+```
 
-(Any public page works, such as Google Sites, Notion, or your own site.)
+Open it in a private window first to check it loads without signing in. If you ever make the repo private again, the link stops working; move the policy to a public gist or another public page then.
 
 ## 3. Upload the package
 
@@ -60,7 +60,7 @@ From [listing.md](listing.md) → *Privacy tab*:
 2. **Permission justification**: one box per permission (`tabs`, `tabGroups`, `storage`, `sidePanel`, `favicon`, `sessions`). Paste each block.
 3. **Remote code**: *No, I am not using remote code.*
 4. **Data usage**: tick **Web history** only, then tick all three certifications.
-5. **Privacy policy URL**: the gist link from step 2.
+5. **Privacy policy URL**: the link from step 2.
 6. **Save draft**.
 
 ## 6. Distribution tab

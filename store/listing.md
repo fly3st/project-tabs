@@ -138,7 +138,10 @@ Tick all three certifications:
 - I do not use or transfer user data for purposes that are unrelated to my item's single purpose
 - I do not use or transfer user data to determine creditworthiness or for lending purposes
 
-**Privacy policy URL**: the public link to `PRIVACY.md` (see SUBMISSION.md, step 4).
+**Privacy policy URL**
+```
+https://github.com/fly3st/project-tabs/blob/main/PRIVACY.md
+```
 
 ---
 
