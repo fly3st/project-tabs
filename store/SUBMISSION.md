@@ -4,14 +4,14 @@ About 30 minutes of clicking, then Google's review (usually a few days). Everyth
 
 ## What you need
 
-- `dist/project-tabs-1.2.1.zip`. Build it with `tools/build-zip.sh`, or use the zip attached in the project thread.
+- `project-tabs-1.2.1.zip`, attached in the project thread.
 - The images in `store/screenshots/` and `store/promo/`.
 - A Google account with 2-Step Verification turned on.
 - $5 for the one-time registration fee.
 
 ## 0. Test the exact build (2 minutes)
 
-Unzip `project-tabs-1.2.1.zip` into a new folder, load that folder with **Load unpacked** in `chrome://extensions`, and click through the panel once. This is exactly what reviewers will run. Remove that copy afterwards so you don't have two Project Tabs installed.
+Unzip the zip into a new folder, load that folder with **Load unpacked** in `chrome://extensions`, and click through the panel once. This is exactly what reviewers will run. Remove that copy afterwards so you don't have two Project Tabs installed.
 
 ## 1. Register as a Chrome Web Store developer
 
@@ -84,7 +84,7 @@ From [listing.md](listing.md) → *Privacy tab*:
 ## Publishing an update later
 
 1. Bump `"version"` in `manifest.json` (it must be higher than the live one).
-2. Run `tools/build-zip.sh`.
+2. Zip the runtime files: `manifest.json`, `background.js`, `sidepanel.html`, `sidepanel.css`, `sidepanel.js` and the `icons/` folder (or ask Claude, who keeps the packaging script in your private project files).
 3. Dashboard → Project Tabs → **Package** → **Upload new package**, then **Submit for review**.
 4. If you add a permission, add its justification on the Privacy tab too. New permissions show users a warning and may disable the extension until they accept.
 

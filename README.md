@@ -154,4 +154,4 @@ It asks for no access to the content of web pages.
 
 ## License
 
-Copyright © 2026 fly3st. All rights reserved. The code is public so you can see how Project Tabs works, but you may not copy, redistribute or publish it. See [LICENSE](LICENSE).
+Copyright © 2026 Daniel Huri. All rights reserved. The code is public so you can see how Project Tabs works, but you may not copy, redistribute or publish it. See [LICENSE](LICENSE).
