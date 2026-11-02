@@ -22,7 +22,6 @@ const state = {
   editing: false,
 };
 let firstMatch = null;
-let lastOpenGroups = [];
 
 const $ = (s) => document.querySelector(s);
 
@@ -130,60 +129,20 @@ async function collapseOthers() {
   }
 }
 
-function snapshot(g, tabs) {
-  return {
-    id: crypto.randomUUID(),
-    title: g.title || '',
-    color: g.color,
-    savedAt: Date.now(),
-    tabs: tabs.map((t) => ({ url: t.url || t.pendingUrl || '', title: t.title || '' })).filter((t) => t.url),
-  };
+// Library changes go through the background worker so they never race.
+async function ask(msg) {
+  const res = await chrome.runtime.sendMessage(msg).catch((e) => ({ error: String(e.message || e) }));
+  if (res && res.error) alert(res.error);
+  return res || {};
 }
 
-async function removeGroupTabs(g, tabs) {
-  // Don't let Chrome close the window if this group is all that's in it.
-  const winTabs = await chrome.tabs.query({ windowId: g.windowId });
-  if (winTabs.length <= tabs.length) await chrome.tabs.create({ windowId: g.windowId });
-  await chrome.tabs.remove(tabs.map((t) => t.id));
-}
-
-async function archiveGroup(g, tabs) {
-  const { archives = [] } = await chrome.storage.local.get('archives');
-  archives.unshift(snapshot(g, tabs));
-  await chrome.storage.local.set({ archives });  // save first, then close
-  const { suppressRecent = [] } = await chrome.storage.session.get('suppressRecent');
-  await chrome.storage.session.set({ suppressRecent: [...suppressRecent, g.id] });
-  await removeGroupTabs(g, tabs);
-}
-
-async function closeGroup(g, tabs) {
-  if (!confirm(`Close "${g.title || 'Untitled'}" (${tabs.length} tabs)?\nYou can bring it back from "Recently closed".`)) return;
-  await removeGroupTabs(g, tabs);
-}
-
-async function restoreEntry(entry, listKey) {
+async function openEntry(entry) {
   const win = await chrome.windows.getCurrent();
-  const ids = [];
-  for (const [i, t] of entry.tabs.entries()) {
-    try {
-      const tab = await chrome.tabs.create({ windowId: win.id, url: t.url, active: i === 0 });
-      ids.push(tab.id);
-    } catch (e) { console.warn('Could not reopen', t.url, e); }
-  }
-  if (!ids.length) { alert('None of the tabs in this project could be reopened.'); return; }
-  const groupId = await chrome.tabs.group({ tabIds: ids, createProperties: { windowId: win.id } });
-  await chrome.tabGroups.update(groupId, { title: entry.title, color: entry.color || 'grey' });
-  await removeEntry(entry.id, listKey);
+  await ask({ type: 'open', id: entry.id, windowId: win.id });
 }
 
-async function saveToArchive(title, tabs) {
-  const { archives = [] } = await chrome.storage.local.get('archives');
-  archives.unshift({
-    id: crypto.randomUUID(), title, color: 'grey', savedAt: Date.now(),
-    tabs: tabs.filter((t) => t.url).map((t) => ({ url: t.url, title: t.title || '' })),
-  });
-  await chrome.storage.local.set({ archives });
-}
+const closeGroup = (g) => ask({ type: 'close', groupId: g.id });
+const saveToLibrary = (title, tabs) => ask({ type: 'add', entries: [{ title, tabs }] });
 
 async function openDeviceSession(sessionId, tabs) {
   // Chrome reopens a synced window as a new window here; fall back to plain tabs if it can't.
@@ -192,11 +151,6 @@ async function openDeviceSession(sessionId, tabs) {
     const win = await chrome.windows.create({ url: tabs.map((t) => t.url) });
     if (win) await chrome.windows.update(win.id, { focused: true });
   }
-}
-
-async function removeEntry(id, listKey) {
-  const list = (await chrome.storage.local.get(listKey))[listKey] || [];
-  await chrome.storage.local.set({ [listKey]: list.filter((e) => e.id !== id) });
 }
 
 function startRename(el, g) {
@@ -246,8 +200,7 @@ function groupCard(g, tabs, visTabs, { q, winLabel }) {
       iconBtn('focus', 'Focus: switch to this project and collapse the others', () => focusGroup(g, tabs), 'primary'),
       iconBtn(g.collapsed ? 'expand' : 'collapse', g.collapsed ? 'Expand in tab strip' : 'Collapse in tab strip',
         () => chrome.tabGroups.update(g.id, { collapsed: !g.collapsed })),
-      iconBtn('archive', 'Archive: save this project and close its tabs', () => archiveGroup(g, tabs)),
-      iconBtn('close', 'Close group', () => closeGroup(g, tabs), 'danger'),
+      iconBtn('close', 'Close: unload its tabs and keep it in Saved projects', () => closeGroup(g)),
     ),
   );
   const card = h('div', { class: 'card' + (g.collapsed ? ' is-collapsed' : ''), style: colorVar(g.color) }, head);
@@ -258,17 +211,19 @@ function groupCard(g, tabs, visTabs, { q, winLabel }) {
   return card;
 }
 
-function savedCard(entry, visTabs, listKey, { q }) {
+function savedCard(entry, visTabs, { q }) {
   const key = 's' + entry.id;
   const open = !!q || state.expanded.has(key);
   const head = h('div', { class: 'row head', onclick: () => toggle(key) },
     caret(open), h('span', { class: 'dot' }), highlight(entry.title || 'Untitled', q),
-    h('span', { class: 'when' }, ago(entry.savedAt)),
+    h('span', { class: 'when', title: 'Last open' }, ago(entry.lastSeen)),
     h('span', { class: 'count' }, entry.tabs.length),
-    textBtn('Restore', 'Reopen all tabs as a group in this window', () => restoreEntry(entry, listKey)),
+    textBtn('Open', 'Open this project as a group in this window', () => openEntry(entry)),
     h('span', { class: 'actions' },
-      iconBtn('trash', 'Delete permanently', () => {
-        if (confirm(`Delete "${entry.title || 'Untitled'}" permanently?`)) removeEntry(entry.id, listKey);
+      iconBtn('trash', 'Remove from Project Tabs', () => {
+        if (confirm(`Remove "${entry.title || 'Untitled'}" from Project Tabs? Its ${entry.tabs.length} saved tabs will be gone.`)) {
+          ask({ type: 'forget', id: entry.id });
+        }
       }, 'danger'),
     ),
   );
@@ -289,7 +244,7 @@ function deviceCard(item, visTabs, { q }) {
     h('span', { class: 'count' }, item.tabs.length),
     textBtn('Open', 'Open these tabs in a new window on this computer', () => openDeviceSession(item.sessionId, item.tabs)),
     h('span', { class: 'actions' },
-      iconBtn('archive', 'Save to Archived (restore it later as a project)', () => saveToArchive(item.title, item.tabs)),
+      iconBtn('archive', 'Save to Saved projects (open it later as a group)', () => saveToLibrary(item.title, item.tabs)),
     ),
   );
   const card = h('div', { class: 'card' }, head);
@@ -326,7 +281,7 @@ try { hideSavedHint = localStorage.getItem('hideSavedHint') === '1'; } catch {}
 
 function savedGroupsHint() {
   return h('div', { class: 'hint' },
-    h('span', {}, 'Chrome doesn\u2019t let extensions see saved groups while they\u2019re closed. Open one from the bookmarks bar (or Ctrl+Shift+T) and it shows up here; Archive it to keep it in this panel.'),
+    h('span', {}, 'Groups saved only in Chrome\u2019s bookmarks bar are invisible to extensions until opened. Click each one once: Project Tabs records it, then close it here (\u00d7) and it lives under Saved projects.'),
     iconBtn('close', 'Hide this tip', () => {
       hideSavedHint = true;
       try { localStorage.setItem('hideSavedHint', '1'); } catch {}
@@ -344,15 +299,18 @@ function sectionHead(label, count, { key, extra } = {}) {
 
 async function render() {
   if (state.editing) return;
-  const [groups, tabs, win, stored, deviceItems] = await Promise.all([
+  const [groups, tabs, win, stored, deviceItems, links] = await Promise.all([
     chrome.tabGroups.query({}),
     chrome.tabs.query({ windowType: 'normal' }),
     chrome.windows.getCurrent(),
-    chrome.storage.local.get(['archives', 'recentlyClosed']),
+    chrome.storage.local.get('library'),
     getDeviceItems(),
+    chrome.storage.session.get('links'),
   ]);
-  const archives = stored.archives || [];
-  const recent = stored.recentlyClosed || [];
+  const library = stored.library || [];
+  const openIds = new Set(Object.entries(links.links || {})
+    .filter(([gid]) => groups.some((g) => String(g.id) === gid)).map(([, id]) => id));
+  const saved = library.filter((e) => !openIds.has(e.id)).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
   const q = state.query.trim().toLowerCase();
   const matches = (s) => (s || '').toLowerCase().includes(q);
   const tabMatches = (t) => !q || matches(t.title) || matches(t.url);
@@ -377,7 +335,6 @@ async function render() {
     .sort((a, b) => (b.windowId === win.id) - (a.windowId === win.id)
       || windowOrder.indexOf(a.windowId) - windowOrder.indexOf(b.windowId)
       || byGroup.get(a.id)[0].index - byGroup.get(b.id)[0].index);
-  lastOpenGroups = openGroups.map((g) => snapshot(g, byGroup.get(g.id)));
 
   const frag = document.createDocumentFragment();
   let shown = 0;
@@ -414,28 +371,20 @@ async function render() {
     frag.append(sec);
   }
 
-  // Archived and recently closed
-  const savedSection = (label, list, listKey, collapsibleKey, extra) => {
-    const cards = [];
-    for (const e of list) {
-      const vis = q && matches(e.title) ? e.tabs : e.tabs.filter(tabMatches);
-      if (q && !vis.length) continue;
-      cards.push(savedCard(e, vis, listKey, { q }));
-    }
-    if (!cards.length && (q || listKey === 'recentlyClosed')) return;
-    shown += cards.length;
-    const { head, open } = sectionHead(label, cards.length, { key: collapsibleKey, extra });
-    const sec = h('section', { class: 'section' }, head);
-    if (open) sec.append(...(cards.length ? cards
-      : [h('div', { class: 'empty' }, 'Nothing archived yet. Hover a project and hit the box icon to shelve it.')]));
+  // Saved projects: every group Project Tabs has seen that isn't open now
+  const savedCards = [];
+  for (const e of saved) {
+    const vis = q && matches(e.title) ? e.tabs : e.tabs.filter(tabMatches);
+    if (q && !vis.length) continue;
+    savedCards.push(savedCard(e, vis, { q }));
+  }
+  if (savedCards.length || !q) {
+    shown += savedCards.length;
+    const sec = h('section', { class: 'section' }, sectionHead('Saved projects', savedCards.length).head);
+    sec.append(...(savedCards.length ? savedCards
+      : [h('div', { class: 'empty' }, 'Closed projects land here. Hover an open project and hit \u00d7 to close it and keep it.')]));
     frag.append(sec);
-  };
-  savedSection('Archived', archives, 'archives');
-  savedSection('Recently closed', recent, 'recentlyClosed', 'sec:recent',
-    h('button', { class: 'link', onclick: (e) => {
-      e.stopPropagation();
-      if (confirm('Clear the recently closed list?')) chrome.storage.local.set({ recentlyClosed: [] });
-    } }, 'Clear'));
+  }
 
   // Other devices
   const deviceCards = [];
@@ -457,7 +406,7 @@ async function render() {
 
   $('#list').replaceChildren(frag);
   $('#stats').textContent =
-    `${openGroups.length} open · ${tabs.length} tabs · ${archives.length} archived`;
+    `${openGroups.length} open · ${saved.length} saved · ${tabs.length} tabs`;
 }
 
 let renderTimer = null;
@@ -467,41 +416,27 @@ function scheduleRender() {
 }
 
 // ---------- Backup ----------
-function exportBackup() {
-  const data = {
-    app: 'project-tabs', version: 1, exportedAt: new Date().toISOString(),
-    openProjects: lastOpenGroups,
-  };
-  chrome.storage.local.get(['archives', 'recentlyClosed']).then(({ archives = [], recentlyClosed = [] }) => {
-    Object.assign(data, { archives, recentlyClosed });
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: `project-tabs-${new Date().toISOString().slice(0, 10)}.json` });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  });
+async function exportBackup() {
+  const { library = [] } = await chrome.storage.local.get('library');
+  const data = { app: 'project-tabs', version: 2, exportedAt: new Date().toISOString(), library };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = h('a', { href: URL.createObjectURL(blob), download: `project-tabs-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 async function importBackup(file) {
-  try {
-    const data = JSON.parse(await file.text());
-    const incoming = [...(data.openProjects || []), ...(data.archives || [])]
-      .filter((e) => e && Array.isArray(e.tabs))
-      .map((e) => ({
-        id: crypto.randomUUID(),
-        title: String(e.title || ''),
-        color: COLORS[e.color] ? e.color : 'grey',
-        savedAt: e.savedAt || Date.now(),
-        tabs: e.tabs.filter((t) => t && t.url).map((t) => ({ url: String(t.url), title: String(t.title || '') })),
-      }))
-      .filter((e) => e.tabs.length);
-    const { archives = [] } = await chrome.storage.local.get('archives');
-    await chrome.storage.local.set({ archives: [...incoming, ...archives] });
-    alert(`Imported ${incoming.length} project(s) into Archived.`);
-  } catch (e) {
-    alert('That file could not be read as a Project Tabs backup.');
-  }
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch { alert('That file could not be read as a Project Tabs backup.'); return; }
+  // v2 backups have "library"; v1 had openProjects / archives / recentlyClosed.
+  const entries = [...(data.library || []), ...(data.openProjects || []), ...(data.archives || []), ...(data.recentlyClosed || [])]
+    .filter((e) => e && Array.isArray(e.tabs))
+    .map((e) => ({ title: e.title, color: COLORS[e.color] ? e.color : 'grey', tabs: e.tabs, lastSeen: e.lastSeen || e.savedAt }));
+  const res = await ask({ type: 'add', entries });
+  if (res.ok) alert(`Imported ${res.added} project(s) into Saved projects.`);
 }
 
 // ---------- Wiring ----------
@@ -537,7 +472,7 @@ for (const ev of ['onCreated', 'onRemoved', 'onUpdated', 'onMoved']) {
   chrome.tabGroups[ev].addListener(scheduleRender);
 }
 chrome.windows.onFocusChanged.addListener(scheduleRender);
-chrome.storage.onChanged.addListener((_c, area) => { if (area === 'local') scheduleRender(); });
+chrome.storage.onChanged.addListener(scheduleRender);
 
 render();
 search.focus();
