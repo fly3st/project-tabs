@@ -84,7 +84,7 @@ From [listing.md](listing.md) → *Privacy tab*:
 ## Publishing an update later
 
 1. Bump `"version"` in `manifest.json` (it must be higher than the live one).
-2. Zip the runtime files: `manifest.json`, `background.js`, `sidepanel.html`, `sidepanel.css`, `sidepanel.js` and the `icons/` folder (or ask Claude, who keeps the packaging script in your private project files).
+2. Build a new zip with the packaging script (kept outside this repo).
 3. Dashboard → Project Tabs → **Package** → **Upload new package**, then **Submit for review**.
 4. If you add a permission, add its justification on the Privacy tab too. New permissions show users a warning and may disable the extension until they accept.
 
