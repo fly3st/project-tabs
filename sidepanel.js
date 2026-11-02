@@ -176,6 +176,24 @@ async function restoreEntry(entry, listKey) {
   await removeEntry(entry.id, listKey);
 }
 
+async function saveToArchive(title, tabs) {
+  const { archives = [] } = await chrome.storage.local.get('archives');
+  archives.unshift({
+    id: crypto.randomUUID(), title, color: 'grey', savedAt: Date.now(),
+    tabs: tabs.filter((t) => t.url).map((t) => ({ url: t.url, title: t.title || '' })),
+  });
+  await chrome.storage.local.set({ archives });
+}
+
+async function openDeviceSession(sessionId, tabs) {
+  // Chrome reopens a synced window as a new window here; fall back to plain tabs if it can't.
+  try { await chrome.sessions.restore(sessionId); }
+  catch {
+    const win = await chrome.windows.create({ url: tabs.map((t) => t.url) });
+    if (win) await chrome.windows.update(win.id, { focused: true });
+  }
+}
+
 async function removeEntry(id, listKey) {
   const list = (await chrome.storage.local.get(listKey))[listKey] || [];
   await chrome.storage.local.set({ [listKey]: list.filter((e) => e.id !== id) });
@@ -262,6 +280,61 @@ function savedCard(entry, visTabs, listKey, { q }) {
   return card;
 }
 
+function deviceCard(item, visTabs, { q }) {
+  const key = 'd' + item.sessionId;
+  const open = !!q || state.expanded.has(key);
+  const head = h('div', { class: 'row head', onclick: () => toggle(key) },
+    caret(open), h('span', { class: 'dot' }), highlight(item.title, q),
+    item.modified && h('span', { class: 'when' }, ago(item.modified)),
+    h('span', { class: 'count' }, item.tabs.length),
+    textBtn('Open', 'Open these tabs in a new window on this computer', () => openDeviceSession(item.sessionId, item.tabs)),
+    h('span', { class: 'actions' },
+      iconBtn('archive', 'Save to Archived (restore it later as a project)', () => saveToArchive(item.title, item.tabs)),
+    ),
+  );
+  const card = h('div', { class: 'card' }, head);
+  if (open) {
+    card.append(h('div', { class: 'tabs' }, visTabs.map((t) =>
+      tabRow(t, q, { onOpen: () => chrome.tabs.create({ url: t.url }) }))));
+  }
+  return card;
+}
+
+// Synced windows from the user's other signed-in devices (needs Chrome Sync).
+async function getDeviceItems() {
+  if (!chrome.sessions || !chrome.sessions.getDevices) return [];
+  const devices = await chrome.sessions.getDevices({ maxResults: 25 }).catch(() => []);
+  const items = [];
+  for (const d of devices) {
+    const windows = d.sessions.filter((s) => (s.window && s.window.tabs && s.window.tabs.length) || s.tab);
+    windows.forEach((s, i) => {
+      const tabs = (s.window ? s.window.tabs : [s.tab]).filter((t) => t.url);
+      if (!tabs.length) return;
+      items.push({
+        sessionId: s.window ? s.window.sessionId : s.tab.sessionId,
+        title: windows.length > 1 ? `${d.deviceName} · window ${i + 1}` : d.deviceName,
+        modified: s.lastModified ? s.lastModified * 1000 : 0,
+        tabs,
+      });
+    });
+  }
+  return items;
+}
+
+let hideSavedHint = false;
+try { hideSavedHint = localStorage.getItem('hideSavedHint') === '1'; } catch {}
+
+function savedGroupsHint() {
+  return h('div', { class: 'hint' },
+    h('span', {}, 'Chrome doesn\u2019t let extensions see saved groups while they\u2019re closed. Open one from the bookmarks bar (or Ctrl+Shift+T) and it shows up here; Archive it to keep it in this panel.'),
+    iconBtn('close', 'Hide this tip', () => {
+      hideSavedHint = true;
+      try { localStorage.setItem('hideSavedHint', '1'); } catch {}
+      render();
+    }),
+  );
+}
+
 function sectionHead(label, count, { key, extra } = {}) {
   const open = !key || state.expanded.has(key) || !!state.query.trim();
   const head = h('div', { class: 'section-head' + (key ? ' clickable' : ''), onclick: key ? () => toggle(key) : null },
@@ -271,11 +344,12 @@ function sectionHead(label, count, { key, extra } = {}) {
 
 async function render() {
   if (state.editing) return;
-  const [groups, tabs, win, stored] = await Promise.all([
+  const [groups, tabs, win, stored, deviceItems] = await Promise.all([
     chrome.tabGroups.query({}),
     chrome.tabs.query({ windowType: 'normal' }),
     chrome.windows.getCurrent(),
     chrome.storage.local.get(['archives', 'recentlyClosed']),
+    getDeviceItems(),
   ]);
   const archives = stored.archives || [];
   const recent = stored.recentlyClosed || [];
@@ -322,6 +396,7 @@ async function render() {
     const sec = h('section', { class: 'section' }, sectionHead('Open projects', openCards.length).head);
     sec.append(...(openCards.length ? openCards
       : [h('div', { class: 'empty' }, 'No tab groups open. Right-click a tab → "Add tab to new group" to start a project.')]));
+    if (!q && !hideSavedHint) sec.append(savedGroupsHint());
     frag.append(sec);
   }
 
@@ -361,6 +436,22 @@ async function render() {
       e.stopPropagation();
       if (confirm('Clear the recently closed list?')) chrome.storage.local.set({ recentlyClosed: [] });
     } }, 'Clear'));
+
+  // Other devices
+  const deviceCards = [];
+  for (const item of deviceItems) {
+    const vis = q && matches(item.title) ? item.tabs : item.tabs.filter(tabMatches);
+    if (q && !vis.length) continue;
+    deviceCards.push(deviceCard(item, vis, { q }));
+  }
+  if (deviceCards.length || !q) {
+    shown += deviceCards.length;
+    const { head, open } = sectionHead('Other devices', deviceCards.length, { key: 'sec:devices' });
+    const sec = h('section', { class: 'section' }, head);
+    if (open) sec.append(...(deviceCards.length ? deviceCards
+      : [h('div', { class: 'empty' }, 'No other devices found. Turn on Chrome Sync (with "Open tabs") on your other computers and phone to see their tabs here.')]));
+    frag.append(sec);
+  }
 
   if (q && !shown) frag.append(h('div', { class: 'empty' }, `No matches for "${state.query.trim()}".`));
 

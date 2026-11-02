@@ -18,7 +18,12 @@ To change the shortcut: `chrome://extensions/shortcuts`.
 - **Search** – press `/`, type, and it filters projects, tabs and archives by title or URL. **Enter** jumps to the first open match.
 - **Collapse others** – tidy the tab strip down to the project you're in.
 - **Collapsed = unloaded** – when a group is collapsed (from Chrome's tab strip, Focus or Collapse others), its tabs are discarded to free memory. They stay in the group and reload when you open them. The active tab and tabs playing audio are left alone.
+- **Other devices** – windows and tabs from your other signed-in computers and phone (needs Chrome Sync with "Open tabs" on). **Open** brings a window over here; the box icon saves it to **Archived** so you can restore it as a project.
 - **⋯ → Export / Import backup** – a JSON file of open, archived and recently closed projects.
+
+### What Chrome doesn't let extensions see
+- **Saved groups that are closed** (the ones on the bookmarks bar). There's no extension API for them; open one and it appears under Open projects. Archive is this panel's equivalent of a saved group.
+- **Incognito windows**, unless you turn on *Allow in Incognito* on the extension's details page in `chrome://extensions`.
 
 Archives are stored locally in the browser (`chrome.storage.local`); export a backup now and then.
 
