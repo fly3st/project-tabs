@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Project Tabs</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header class="top">
+    <label class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="search" type="search" placeholder="Search projects & tabs   /" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="toolbar">
+      <span id="stats" class="stats"></span>
+      <div class="tools">
+        <button id="collapseOthers" class="tbtn" title="Collapse every group in this window except the one you're in">Collapse others</button>
+        <button id="menuBtn" class="tbtn icon" title="More" aria-haspopup="true">
+          <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </button>
+        <div id="menu" class="menu" hidden>
+          <button id="exportBtn">Export backup (.json)</button>
+          <button id="importBtn">Import backup…</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <main id="list"></main>
+  <input id="importFile" type="file" accept="application/json,.json" hidden>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
