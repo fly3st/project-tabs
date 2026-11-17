@@ -194,6 +194,15 @@ async function addEntries(entries) {
   return { ok: true, added: added.length };
 }
 
+async function renameEntry(id, title) {
+  const { lib } = await load();
+  const e = lib.find((x) => x.id === id);
+  if (!e) return { error: 'That project no longer exists.' };
+  e.title = String(title || '');
+  await chrome.storage.local.set({ [LIB_KEY]: lib });
+  return { ok: true };
+}
+
 async function forgetEntry(id) {
   const { lib, links } = await load();
   if (Object.values(links).includes(id)) return { error: 'Close the project before removing it.' };
@@ -207,6 +216,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     close: () => closeGroup(msg.groupId),
     add: () => addEntries(msg.entries || []),
     forget: () => forgetEntry(msg.id),
+    rename: () => renameEntry(msg.id, msg.title),
     sync: () => sync().then(() => ({ ok: true })),
   }[msg && msg.type];
   if (!run) return false;

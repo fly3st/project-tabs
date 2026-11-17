@@ -39,7 +39,10 @@ Tab groups are a great way to keep a project together, but Chrome only shows the
 ## Features
 
 ### 🗂️ Open projects
-Every tab group in every window, with its color, name and tab count. Click a project to expand its tabs, click a tab to jump to it, and double-click a project's name to rename it. When you have more than one window open, each project shows which window it's in.
+Every tab group in every window, with its color, name and tab count. Click a project to expand its tabs, click a tab to jump to it, and rename a project with the pencil button (or by double-clicking its name). Saved projects can be renamed the same way. When you have more than one window open, each project shows which window it's in.
+
+### 🧲 Drag tabs into projects
+Drag one ungrouped tab onto another to put them in a new group, and the panel asks for its name right away. Drag any tab onto a project to move it there, or onto **Ungrouped tabs** to take it out of its group. This works across windows too.
 
 ### 🔎 Instant search
 Press <kbd>/</kbd> anywhere in the panel and start typing. Open projects, saved projects, ungrouped tabs and tabs from other devices all filter as you type, matching both titles and URLs, with the matches highlighted. <kbd>Enter</kbd> jumps to the first open match and <kbd>Esc</kbd> clears the search.
@@ -121,9 +124,10 @@ Then pin it to the toolbar and click its icon, or press <kbd>Alt</kbd>+<kbd>Shif
 | Action | How |
 | --- | --- |
 | Open the panel | Toolbar icon, or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> |
-| Start a project | Right-click a tab → **Add tab to new group** |
+| Start a project | Drag one ungrouped tab onto another, or right-click a tab → **Add tab to new group** |
+| Move a tab to a project | Drag it onto the project |
 | Search | <kbd>/</kbd>, then type. <kbd>Enter</kbd> jumps, <kbd>Esc</kbd> clears |
-| Rename a project | Double-click its name, then <kbd>Enter</kbd> |
+| Rename a project | Hover it → pencil button (or double-click its name), then <kbd>Enter</kbd> |
 | Focus a project | Hover it → target button |
 | Collapse or expand in the tab strip | Hover it → arrows button |
 | Put a project away | Hover it → × |
