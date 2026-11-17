@@ -66,6 +66,26 @@ async function panelShot(browser, base, { dark, steps }) {
   return 'data:image/png;base64,' + buf.toString('base64');
 }
 
+// Freeze the panel mid-drag (a real drag can't be screenshotted): the source
+// row dimmed, the target outlined, and a ghost of the source under the cursor.
+function dragPose({ from, to }) {
+  const row = (t) => [...document.querySelectorAll('.row.tab')].find((r) => r.textContent.includes(t));
+  const src = row(from), dst = row(to);
+  document.body.classList.add('dragging');
+  src.classList.add('drag-src');
+  dst.classList.add('drop');
+  const r = dst.getBoundingClientRect();
+  const ghost = src.cloneNode(true);
+  ghost.classList.remove('drag-src');
+  ghost.style.cssText = `position:fixed;left:${r.left + 130}px;top:${r.top + 18}px;width:${r.width - 140}px;` +
+    'background:var(--card);border:1px solid var(--line);border-radius:8px;opacity:.92;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:9;pointer-events:none';
+  document.body.append(ghost);
+  const cursor = document.createElement('div');
+  cursor.innerHTML = '<svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:#fff;stroke:#111;stroke-width:1.3"><path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V10m0-1.5a1.5 1.5 0 0 1 3 0V10m0-.5a1.5 1.5 0 0 1 3 0V11m0-.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L5 14a1.5 1.5 0 0 1 2.4-1.8L8 13"/></svg>';
+  cursor.style.cssText = `position:fixed;left:${r.left + 160}px;top:${r.top + 24}px;z-index:10;pointer-events:none`;
+  document.body.append(cursor);
+}
+
 const head = (page, text) => page.locator('.row.head', { hasText: text }).first();
 const sectionHead = (page, text) => page.locator('.section-head', { hasText: text }).first();
 
@@ -166,7 +186,7 @@ async function renderHtml(browser, html, file, { w, h, scale = 1, transparent = 
   const scenes = [
     { file: '1-overview', panel: { steps: async (p) => { await head(p, 'Q4 Launch').click(); await head(p, 'Q4 Launch').hover(); } },
       title: 'Your tab groups, as projects.', sub: 'One side panel for every project you have open, in every window.',
-      bullets: ['See each group with its color and tab count', 'Click to expand, double-click to rename', 'Focus, collapse or close with one click'] },
+      bullets: ['See each group with its color and tab count', 'Rename a project with the pencil', 'Focus, collapse or close with one click'] },
     { file: '2-search', panel: { steps: async (p) => { await p.fill('#search', 'flight'); } },
       title: 'Find any tab in a keystroke.', sub: 'Press / and type. Projects and tabs filter as you go.',
       bullets: ['Matches titles and URLs', 'Searches open and saved projects', 'Enter jumps to the first match'] },
@@ -183,9 +203,14 @@ async function renderHtml(browser, html, file, { w, h, scale = 1, transparent = 
       } },
       eyebrow: 'Dark mode', title: 'Tabs from your other devices.', sub: 'Pick up what you had open on your phone or work laptop.',
       bullets: ['Open a synced window right here', 'Save it as a project for later', 'Follows your light or dark theme'] },
-    { file: '5-focus', panel: { steps: async (p) => { await head(p, 'Thesis research').click(); await head(p, 'Thesis research').hover(); } },
-      title: 'Focus on one project.', sub: 'Focus switches to a project and collapses the others, so the rest stop using memory.',
-      bullets: ['Collapsed groups are unloaded from memory', 'Tabs reload when you open them again', 'Alt+Shift+P opens the panel anywhere'] },
+    { file: '5-drag', panel: { steps: async (p) => {
+        await sectionHead(p, 'Ungrouped tabs').click();
+        await p.waitForSelector('.row.tab >> text=Weather');
+        await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await p.evaluate(dragPose, { from: 'Weather', to: 'Inbox' });
+      } },
+      title: 'Drag tabs into projects.', sub: 'Drop one loose tab on another to start a project, or on a project to add it.',
+      bullets: ['Name the new group right away', 'Take a tab out with one click', 'Works across windows'] },
   ];
 
   const panels = {};
