@@ -124,3 +124,15 @@ main { padding: 8px 10px 40px; }
   background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 5px; outline: 0;
 }
 mark { background: rgba(249,171,0,.35); color: inherit; border-radius: 2px; }
+
+/* Drag and drop */
+.row.tab[draggable="true"] { cursor: grab; }
+.row.drag-src { opacity: .45; }
+body.dragging .row:hover { background: none; }
+body.dragging .actions { opacity: 0 !important; }
+.row.tab.drop { background: var(--hover); box-shadow: inset 0 0 0 2px var(--accent); border-radius: 6px; }
+.card.drop { box-shadow: 0 0 0 2px var(--accent); }
+.section.drop > .section-head { color: var(--accent); }
+.section.drop > .card { box-shadow: 0 0 0 2px var(--accent); }
+.section-head { white-space: nowrap; }
+.section-head .tip { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -14,12 +14,15 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
 };
 
 const state = {
   query: '',
   expanded: new Set(),   // 'g<id>' for open groups, 's<id>' for saved entries, 'sec:<name>' for sections
   editing: false,
+  dragTab: null,         // the open tab being dragged, while a drag is in progress
+  renameGroupId: null,   // a group just made by dragging; its name field opens on the next render
 };
 let firstMatch = null;
 
@@ -153,9 +156,10 @@ async function openDeviceSession(sessionId, tabs) {
   }
 }
 
-function startRename(el, g) {
+// Swap a title for a text field. onSave gets the trimmed new name.
+function startRename(el, current, onSave) {
   state.editing = true;
-  const input = h('input', { class: 'rename', value: g.title || '', placeholder: 'Project name' });
+  const input = h('input', { class: 'rename', value: current || '', placeholder: 'Name this project' });
   el.replaceWith(input);
   input.focus();
   input.select();
@@ -164,7 +168,7 @@ function startRename(el, g) {
     if (done) return;
     done = true;
     state.editing = false;
-    if (save) await chrome.tabGroups.update(g.id, { title: input.value.trim() }).catch(() => {});
+    if (save && input.value.trim() !== (current || '')) await onSave(input.value.trim());
     render();
   };
   input.addEventListener('click', (e) => e.stopPropagation());
@@ -176,27 +180,102 @@ function startRename(el, g) {
   input.addEventListener('blur', () => finish(true));
 }
 
+const renameGroup = (g) => (name) => chrome.tabGroups.update(g.id, { title: name }).catch(() => {});
+const renameEntry = (entry) => (name) => ask({ type: 'rename', id: entry.id, title: name });
+
+// Title that renames on double-click, plus the pencil button that does the same.
+function renamable(text, q, current, onSave) {
+  const title = highlight(text, q);
+  title.title = `${text}\nDouble-click to rename`;
+  title.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(title, current, onSave); });
+  const btn = iconBtn('pencil', 'Rename', () => startRename(title, current, onSave));
+  return { title, btn };
+}
+
+// ---------- Drag and drop ----------
+// Drag an open tab onto an ungrouped tab to make a new group of the two,
+// onto a project to add it there, or onto "Ungrouped tabs" to take it out.
+const DRAG_TYPE = 'application/x-project-tab';
+
+function makeDraggable(row, t) {
+  if (t.pinned) return;  // Chrome won't group pinned tabs
+  row.draggable = true;
+  row.addEventListener('dragstart', (e) => {
+    state.dragTab = t;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(DRAG_TYPE, String(t.id));
+    document.body.classList.add('dragging');
+    row.classList.add('drag-src');
+  });
+  row.addEventListener('dragend', endDrag);
+}
+
+function endDrag() {
+  state.dragTab = null;
+  document.body.classList.remove('dragging');
+  for (const el of document.querySelectorAll('.drop, .drag-src')) el.classList.remove('drop', 'drag-src');
+  scheduleRender();
+}
+
+// accepts(tab) says whether this target takes the dragged tab; onDrop(tab) does the work.
+function dropTarget(el, accepts, onDrop) {
+  const ok = (e) => state.dragTab && e.dataTransfer.types.includes(DRAG_TYPE) && accepts(state.dragTab);
+  el.addEventListener('dragover', (e) => {
+    if (!ok(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    for (const d of document.querySelectorAll('.drop')) if (d !== el) d.classList.remove('drop');
+    el.classList.add('drop');
+  });
+  el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop'); });
+  el.addEventListener('drop', async (e) => {
+    if (!ok(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const t = state.dragTab;
+    endDrag();
+    try { await onDrop(t); }
+    catch (err) { alert(`Couldn't move that tab: ${err.message || err}`); }
+    render();
+  });
+}
+
+async function groupWith(dragged, target) {
+  const groupId = await chrome.tabs.group({
+    tabIds: [target.id, dragged.id],
+    createProperties: { windowId: target.windowId },
+  });
+  state.expanded.add('g' + groupId);
+  state.renameGroupId = groupId;
+}
+
+const addToGroup = (t, g) => chrome.tabs.group({ tabIds: [t.id], groupId: g.id });
+const ungroupTab = (t) => chrome.tabs.ungroup([t.id]);
+
 // ---------- Rendering ----------
-function tabRow(t, q, { onOpen, onClose }) {
-  return h('div', { class: 'row tab' + (t.active ? ' active' : ''), onclick: onOpen, title: t.url },
+function tabRow(t, q, { onOpen, onClose, drag }) {
+  const row = h('div', { class: 'row tab' + (t.active ? ' active' : ''), onclick: onOpen, title: t.url },
     favicon(t.url),
     highlight(t.title || t.url || 'Untitled', q),
     onClose && h('span', { class: 'actions' }, iconBtn('close', 'Close tab', onClose, 'danger')),
   );
+  if (drag) makeDraggable(row, t);
+  return row;
 }
 
 function groupCard(g, tabs, visTabs, { q, winLabel }) {
   const key = 'g' + g.id;
   const open = !!q || state.expanded.has(key);
-  const title = highlight(g.title || 'Untitled', q);
-  title.title = 'Double-click to rename';
-  title.addEventListener('dblclick', (e) => { e.stopPropagation(); startRename(title, g); });
+  const { title, btn: renameBtn } = renamable(g.title || 'Untitled', q, g.title, renameGroup(g));
+  title.dataset.gid = g.id;
 
   const head = h('div', { class: 'row head', onclick: () => toggle(key) },
     caret(open), h('span', { class: 'dot' }), title,
     winLabel && h('span', { class: 'badge' }, winLabel),
     h('span', { class: 'count' }, tabs.length),
     h('span', { class: 'actions' },
+      renameBtn,
       iconBtn('focus', 'Focus: switch to this project and collapse the others', () => focusGroup(g, tabs), 'primary'),
       iconBtn(g.collapsed ? 'expand' : 'collapse', g.collapsed ? 'Expand in tab strip' : 'Collapse in tab strip',
         () => chrome.tabGroups.update(g.id, { collapsed: !g.collapsed })),
@@ -204,9 +283,10 @@ function groupCard(g, tabs, visTabs, { q, winLabel }) {
     ),
   );
   const card = h('div', { class: 'card' + (g.collapsed ? ' is-collapsed' : ''), style: colorVar(g.color) }, head);
+  dropTarget(card, (t) => t.groupId !== g.id, (t) => addToGroup(t, g));
   if (open) {
     card.append(h('div', { class: 'tabs' }, visTabs.map((t) =>
-      tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id) }))));
+      tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id), drag: true }))));
   }
   return card;
 }
@@ -214,12 +294,14 @@ function groupCard(g, tabs, visTabs, { q, winLabel }) {
 function savedCard(entry, visTabs, { q }) {
   const key = 's' + entry.id;
   const open = !!q || state.expanded.has(key);
+  const { title, btn: renameBtn } = renamable(entry.title || 'Untitled', q, entry.title, renameEntry(entry));
   const head = h('div', { class: 'row head', onclick: () => toggle(key) },
-    caret(open), h('span', { class: 'dot' }), highlight(entry.title || 'Untitled', q),
+    caret(open), h('span', { class: 'dot' }), title,
     h('span', { class: 'when', title: 'Last open' }, ago(entry.lastSeen)),
     h('span', { class: 'count' }, entry.tabs.length),
     textBtn('Open', 'Open this project as a group in this window', () => openEntry(entry)),
     h('span', { class: 'actions' },
+      renameBtn,
       iconBtn('trash', 'Remove from Project Tabs', () => {
         if (confirm(`Remove "${entry.title || 'Untitled'}" from Project Tabs? Its ${entry.tabs.length} saved tabs will be gone.`)) {
           ask({ type: 'forget', id: entry.id });
@@ -290,15 +372,17 @@ function savedGroupsHint() {
   );
 }
 
+const isOpen = (key) => !key || state.expanded.has(key) || !!state.query.trim();
+
 function sectionHead(label, count, { key, extra } = {}) {
-  const open = !key || state.expanded.has(key) || !!state.query.trim();
+  const open = isOpen(key);
   const head = h('div', { class: 'section-head' + (key ? ' clickable' : ''), onclick: key ? () => toggle(key) : null },
     key && caret(open), label, h('span', {}, `· ${count}`), h('span', { class: 'grow' }), extra);
   return { head, open };
 }
 
 async function render() {
-  if (state.editing) return;
+  if (state.editing || state.dragTab) return;
   const [groups, tabs, win, stored, deviceItems, links] = await Promise.all([
     chrome.tabGroups.query({}),
     chrome.tabs.query({ windowType: 'normal' }),
@@ -352,7 +436,7 @@ async function render() {
   if (!q || openCards.length) {
     const sec = h('section', { class: 'section' }, sectionHead('Open projects', openCards.length).head);
     sec.append(...(openCards.length ? openCards
-      : [h('div', { class: 'empty' }, 'No tab groups open. Right-click a tab → "Add tab to new group" to start a project.')]));
+      : [h('div', { class: 'empty' }, 'No tab groups open. Drag one ungrouped tab onto another below to start a project.')]));
     if (!q && !hideSavedHint) sec.append(savedGroupsHint());
     frag.append(sec);
   }
@@ -361,11 +445,19 @@ async function render() {
   const ungroupedVis = ungrouped.filter(tabMatches);
   if (ungroupedVis.length) {
     if (q && !firstMatch) firstMatch = ungroupedVis[0];
-    const { head, open } = sectionHead('Ungrouped tabs', ungroupedVis.length, { key: 'sec:ungrouped' });
+    const { head, open } = sectionHead('Ungrouped tabs', ungroupedVis.length, {
+      key: 'sec:ungrouped',
+      extra: isOpen('sec:ungrouped') && ungroupedVis.length > 1 && h('span', { class: 'tip' }, 'Drag one onto another to group'),
+    });
     const sec = h('section', { class: 'section' }, head);
+    dropTarget(sec, (t) => t.groupId >= 0, ungroupTab);
     if (open) {
       sec.append(h('div', { class: 'card' }, h('div', { class: 'tabs', style: 'border-top:0' },
-        ungroupedVis.map((t) => tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id) })))));
+        ungroupedVis.map((t) => {
+          const row = tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id), drag: true });
+          dropTarget(row, (d) => d.id !== t.id, (d) => groupWith(d, t));
+          return row;
+        }))));
     }
     shown += ungroupedVis.length;
     frag.append(sec);
@@ -404,7 +496,21 @@ async function render() {
 
   if (q && !shown) frag.append(h('div', { class: 'empty' }, `No matches for "${state.query.trim()}".`));
 
+  // Something may have started while we were reading tabs; don't pull the DOM out from under it.
+  if (state.editing || state.dragTab) return;
   $('#list').replaceChildren(frag);
+
+  // A group just made by dragging: ask for its name straight away.
+  if (state.renameGroupId != null) {
+    const gid = state.renameGroupId;
+    state.renameGroupId = null;
+    const el = document.querySelector(`.title[data-gid="${gid}"]`);
+    const g = groups.find((x) => x.id === gid);
+    if (el && g) {
+      el.scrollIntoView({ block: 'nearest' });
+      startRename(el, g.title, renameGroup(g));
+    }
+  }
   $('#stats').textContent =
     `${openGroups.length} open · ${saved.length} saved · ${tabs.length} tabs`;
 }
