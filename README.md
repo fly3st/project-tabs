@@ -95,7 +95,7 @@ The panel follows your system theme automatically.
     <td align="center"><sub><b>Other devices, in dark mode</b></sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="store/screenshots/5-focus.png" alt="Focus on one project"></td>
+    <td colspan="2"><img src="store/screenshots/5-drag.png" alt="Drag tabs into projects"></td>
   </tr>
   <tr>
     <td colspan="2" align="center"><sub><b>Focus on one project and unload the rest</b></sub></td>
