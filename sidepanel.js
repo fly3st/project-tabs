@@ -14,6 +14,7 @@ const ICONS = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  ungroup: '<path d="M14 4h6v6M20 4l-8 8"/><path d="M10 5H5v14h14v-5"/>',
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
 };
 
@@ -254,11 +255,13 @@ const addToGroup = (t, g) => chrome.tabs.group({ tabIds: [t.id], groupId: g.id }
 const ungroupTab = (t) => chrome.tabs.ungroup([t.id]);
 
 // ---------- Rendering ----------
-function tabRow(t, q, { onOpen, onClose, drag }) {
+function tabRow(t, q, { onOpen, onClose, onUngroup, drag }) {
   const row = h('div', { class: 'row tab' + (t.active ? ' active' : ''), onclick: onOpen, title: t.url },
     favicon(t.url),
     highlight(t.title || t.url || 'Untitled', q),
-    onClose && h('span', { class: 'actions' }, iconBtn('close', 'Close tab', onClose, 'danger')),
+    (onClose || onUngroup) && h('span', { class: 'actions' },
+      onUngroup && iconBtn('ungroup', 'Remove from group (keeps the tab open)', onUngroup),
+      onClose && iconBtn('close', 'Close tab', onClose, 'danger')),
   );
   if (drag) makeDraggable(row, t);
   return row;
@@ -286,7 +289,8 @@ function groupCard(g, tabs, visTabs, { q, winLabel }) {
   dropTarget(card, (t) => t.groupId !== g.id, (t) => addToGroup(t, g));
   if (open) {
     card.append(h('div', { class: 'tabs' }, visTabs.map((t) =>
-      tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id), drag: true }))));
+      tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id),
+        onUngroup: () => ungroupTab(t).then(render), drag: true }))));
   }
   return card;
 }
