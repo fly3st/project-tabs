@@ -289,7 +289,10 @@ function groupCard(g, tabs, visTabs, { q, winLabel }) {
   dropTarget(card, (t) => t.groupId !== g.id, (t) => addToGroup(t, g));
   if (open) {
     card.append(h('div', { class: 'tabs' }, visTabs.map((t) =>
-      tabRow(t, q, { onOpen: () => activateTab(t), onClose: () => chrome.tabs.remove(t.id),
+      tabRow(t, q, { onOpen: () => activateTab(t),
+        // Closing a project's last tab closes the project, the same way as its
+        // close button, so Chrome doesn't keep a saved copy of the group.
+        onClose: () => (tabs.length === 1 ? closeGroup(g) : chrome.tabs.remove(t.id)),
         onUngroup: () => ungroupTab(t).then(render), drag: true }))));
   }
   return card;

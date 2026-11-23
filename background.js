@@ -164,18 +164,40 @@ async function openEntry(id, windowId) {
   return { ok: true };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Take every tab out of the group, retrying while Chrome refuses edits (it
+// does while a tab is being dragged). Returns true once the group is empty.
+async function ungroupAll(groupId) {
+  for (let i = 0; i < 10; i++) {
+    const tabs = await chrome.tabs.query({ groupId });
+    if (!tabs.length) return true;
+    await chrome.tabs.ungroup(tabs.map((t) => t.id)).catch(() => {});
+    if (!(await chrome.tabs.query({ groupId })).length) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
+// Chrome keeps every group you close as a saved group in its own tab group
+// manager. Ungrouping is the one action it treats as "delete the saved
+// group", so the tabs are ungrouped first and only then closed; the library
+// is the one place closed projects live. If the ungroup doesn't go through,
+// nothing is closed, so Chrome never ends up with a leftover copy.
 async function closeGroup(groupId) {
   await sync();  // make sure the library has the latest tabs first
   const tabs = await chrome.tabs.query({ groupId });
   if (!tabs.length) return { ok: true };
+  const ids = tabs.map((t) => t.id);
   // Don't let Chrome close the window if this group is all that's in it.
   const winTabs = await chrome.tabs.query({ windowId: tabs[0].windowId });
   if (winTabs.length <= tabs.length) await chrome.tabs.create({ windowId: tabs[0].windowId });
-  // Ungroup first so Chrome doesn't also keep its own saved copy of the
-  // group; the library is the one place closed projects live.
-  const ids = tabs.map((t) => t.id);
-  await chrome.tabs.ungroup(ids).catch(() => {});
-  await chrome.tabs.remove(ids);
+  if (!(await ungroupAll(groupId))) {
+    return { error: 'Chrome is busy (maybe a tab is being dragged). Try closing the project again in a moment.' };
+  }
+  // Give Chrome a moment to drop its saved copy before the tabs go away.
+  await sleep(300);
+  await chrome.tabs.remove(ids).catch(() => {});
   const { links } = await load();
   delete links[groupId];
   await chrome.storage.session.set({ [LINKS_KEY]: links });
