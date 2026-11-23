@@ -9,7 +9,7 @@ One side panel to see, search, focus, close and reopen every project you work on
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-4285f4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ghpbcjpmnhjhgngklcpocnffcamjalli)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-1a73e8?style=flat-square)
-![Version](https://img.shields.io/badge/version-1.2.1-34c26b?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.3.1-34c26b?style=flat-square)
 ![No dependencies](https://img.shields.io/badge/dependencies-0-ff9a3c?style=flat-square)
 ![Privacy](https://img.shields.io/badge/data-stays%20in%20your%20browser-9334e6?style=flat-square)
 
